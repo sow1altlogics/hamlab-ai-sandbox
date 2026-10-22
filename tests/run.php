@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../app/gate.php';
 require __DIR__ . '/../app/greeting.php';
+require __DIR__ . '/../app/clock.php';
 
 $failed = 0;
 function check(bool $ok, string $name): void { global $failed; echo ($ok ? '  ok  ' : '  NG  ') . $name . "\n"; if (!$ok) { $failed++; } }
@@ -15,6 +16,8 @@ check(demo_gate(true, $t . 'y', $t)['reason'] === 'mismatch', '不一致→拒�
 check(demo_gate(true, $t, $t)['reason'] === 'approved', '一致→許可');
 check(demo_greeting(' ja8xyz ') === 'Hello, JA8XYZ', 'あいさつ');
 check(demo_greeting('') === 'Hello, operator', '空のあいさつ');
+check(demo_format_utc(0) === '1970-01-01 00:00', 'UTC整形(0)');
+check(demo_format_utc(86399) === '1970-01-01 23:59', 'UTC整形(1日の終わり)');
 
 echo $failed === 0 ? "ALL PASSED\n" : "{$failed} FAILED\n";
 exit($failed === 0 ? 0 : 1);
