@@ -61,4 +61,6 @@ GOT="$(git ls-remote "$REMOTE" "refs/heads/${BASE}" | cut -f1)"
 if [ -n "$OLD_LOCAL" ]; then git update-ref "refs/heads/${BASE}" "$S" "$OLD_LOCAL"; else git update-ref "refs/heads/${BASE}" "$S"; fi
 git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null || git tag "$TAG" "$P"
 git push -q "$REMOTE" "refs/tags/${TAG}" || echo "⚠️ タグの push に失敗（${TAG}）。手で push してください"
+# 古い「合格」を残さないため、開いている PR の base-freshness を再実行する（ベストエフォート）
+"$(dirname "$0")/recheck_prs.sh" || true
 echo "✅ ${BASE} を ${S:0:7} に更新しました（リモート検証済み）。次: ai/integration に取り込む sync PR（ai/sync-<日付>）を出してください。"

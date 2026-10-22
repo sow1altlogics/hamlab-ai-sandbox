@@ -1,0 +1,24 @@
+name: base-freshness
+# ai/integration が ai/base（本番基準）より古いまま、レビュー済みの変更が積み上がるのを防ぐ。
+# 注意: この判定は PR のイベント時点のもの。ai/base が後から更新されても自動では再実行されない。
+#       対策は2つ: ① ops/ai/sync.sh が ai/base 更新のあと開いている PR の本チェックを再実行する
+#                  ② マージ直前に ops/ai/pre_merge_check.sh でその時点の状態を再確認する（人間が実行）
+on:
+  pull_request:
+    branches: [ai/integration]
+permissions:
+  contents: read
+jobs:
+  base-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: ai/base を取り込み済みか
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin ai/base ai/integration
+          bash ops/ci/check_base_freshness.sh "$HEAD_SHA"

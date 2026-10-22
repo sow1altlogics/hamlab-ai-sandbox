@@ -1,0 +1,22 @@
+name: no-unexpected-bot-push
+# 第1段階は一方向（レビューのみ）。bot が PR ブランチへコミットしたら止める。
+# 意図して許す場合だけ、PR に allow-bot-push ラベルを付ける。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [ai/integration]
+permissions:
+  contents: read
+jobs:
+  no-unexpected-bot-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: PR のコミットの作者を確認
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: bash ops/ci/check_bot_commits.sh "${BASE_SHA}" "${HEAD_SHA}" "${LABELS}"

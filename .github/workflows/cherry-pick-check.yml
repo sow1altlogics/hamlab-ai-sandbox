@@ -1,0 +1,27 @@
+name: cherry-pick-check
+# この PR の変更を、いまの本番基準(ai/base)にそのまま当てられるかを、配布の前に知らせる。
+# 当たらない場合は、未配布の変更に依存している可能性がある（依存を PR に書くこと）。
+# sync PR の免除は、ブランチ名ではなく中身（ops/ci/is_sync_pr.sh）で判定する。
+on:
+  pull_request:
+    branches: [ai/integration]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+permissions:
+  contents: read
+jobs:
+  cherry-pick-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 本番基準に当てられるか
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin ai/base ai/integration
+          if bash ops/ci/is_sync_pr.sh "$HEAD_SHA" "$LABELS" "$SAME_REPO"; then exit 0; fi
+          bash ops/ci/check_cherry_pick.sh "$HEAD_SHA"
