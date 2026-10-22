@@ -21,6 +21,20 @@
 - CI（tests / gitleaks / base-freshness / cherry-pick-check / no-unexpected-bot-push）の実行確認:
   ワークフローの push には gh トークンの `workflow` スコープが必要。一時的に付与し、検証後に外す。
 
+
+## CI の検証（ブートストラップ PR #3、2026-10-22）
+| チェック | 結果 | 備考 |
+|---|---|---|
+| tests | 成功 | PHP 8.4 で構文チェックとテストが通る |
+| gitleaks | 成功 | PR のコミット範囲を検査（バージョン固定・チェックサム検証でインストール） |
+| cherry-pick-check | 成功 | PR の差分が、本番基準(ai/base)にそのまま当てられる |
+| no-unexpected-bot-push | 成功 | bot のコミットなし |
+| base-freshness | **最初は失敗 → sync PR で解消 → 再実行で成功** | T7c の割り込み更新が `ai/base` に残り、`ai/integration` が遅れていたのを正しく検出した（意図した動作） |
+
+### 分かったこと
+- ワークフローは、その PR のブランチにあるものが動く。**ブートストラップ PR をマージするまで、`ai/integration` にはワークフローが無い**ので、先にマージした sync PR にはチェックが付かなかった。必須チェックは、ブートストラップ PR のマージ後に Ruleset へ追加する。
+- ワークフローの push には、Fine-grained PAT の「Workflows: Read and write」が必要だった（Contents だけでは通らない、と実際に確認はしていない。付けて push が通った）。PAT は sandbox の1リポジトリだけ・7日で期限切れ・検証後に失効する。
+
 ## 設定（再現手順）
 1. 公開リポジトリを作成（ダミーのみ）。`main` を既定、`ai/base` と `ai/integration` を同じ位置に作る。
 2. Ruleset `ai-integration`（`docs/rulesets/ai-integration.json`）: 削除禁止・force push 禁止・PR 必須（承認 0・会話の解決必須）・バイパスなし。
