@@ -18,3 +18,5 @@ jobs:
         run: for f in app/*.php tests/*.php; do php -l "$f"; done
       - name: テスト
         run: php tests/run.php
+      - name: CI スクリプトの単体テスト（bot 検出・sync 判定・鮮度・Codex 完了判定）
+        run: bash tests/ci/run.sh
