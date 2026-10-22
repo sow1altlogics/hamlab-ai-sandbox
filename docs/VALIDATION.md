@@ -35,6 +35,28 @@
 - ワークフローは、その PR のブランチにあるものが動く。**ブートストラップ PR をマージするまで、`ai/integration` にはワークフローが無い**ので、先にマージした sync PR にはチェックが付かなかった。必須チェックは、ブートストラップ PR のマージ後に Ruleset へ追加する。
 - ワークフローの push には、Fine-grained PAT の「Workflows: Read and write」が必要だった（Contents だけでは通らない、と実際に確認はしていない。付けて push が通った）。PAT は sandbox の1リポジトリだけ・7日で期限切れ・検証後に失効する。
 
+
+## Codex（ChatGPT Codex Connector）の検証（2026-10-22）
+bot のアカウント名: `chatgpt-codex-connector[bot]`
+
+| # | 内容 | 結果 |
+|---|---|---|
+| T1a | PR #3 に `@codex review`（手動） | 約15秒で 👀、サマリーコメントは14秒後。**レビュー完了まで約3分51秒**。P1 の指摘が4件付いた |
+| T1b | `ai/integration` 宛ての新規 PR（#5, #6）の**自動**レビュー | **約10分たっても起動しなかった**（反応なし） |
+| 切り分け | `main` 宛ての PR（#7）／通常の OAuth 認証で作った PR（#8）／ドラフト→レビュー可の切り替え（#7） | **いずれも自動では起動しなかった**。ベース・作成方法・イベントの違いでは説明できない。Codex 側の「自動レビュー」の設定が効いていない可能性が高い（設定画面の確認が必要） |
+| T2 | 意図的な欠陥（承認トークン未設定のとき許可する fail-open）を含む PR #6 に `@codex review`（手動） | **約55秒で P1 を指摘**。「`null` のとき `ok: true` を返すのは不可。fail-closed に戻す」と、AGENTS.md の該当行を引用 |
+| T2' | 問題のない PR #5 に `@codex review`（手動） | 8分以上「実行中」のまま（👀）。結果は後で追記する |
+| T3 | AGENTS.md の見出し | `## Review guidelines` の内容は効いている（指摘が AGENTS.md の L3-L5 を引用）。`## Code Review Rules` 側のみに書いた規則は未検証 |
+| T8 | 権限・アカウント名 | アカウント名は上記。権限一覧は、インストール画面でユーザーが確認（スクリーンショット未提供）。レビュー中に Codex が push したコミットは無し |
+
+### PR #3 への Codex の指摘（P1 が4件、いずれも妥当）
+1. `base-freshness`: `ai/base` が更新されても再評価されず、古い合格が残る
+2. `cherry-pick-check`: ブランチ名 `ai/sync-*` だけで免除しており、なりすませる（フォークの PR など）
+3. `no-unexpected-bot-push`: `git log` の失敗が `|| true` に飲み込まれ、失敗しても「OK」になる
+4. `no-unexpected-bot-push`: ラベルの部分一致で、`allow-bot-push` を含む別のラベルでも通ってしまう
+
+※ 指摘が自分のワークフローの実際の欠陥だった。Codex のレビューは、少なくともこの種の fail-open の見落としに有効だった。ただし検出を保証するものではない。
+
 ## 設定（再現手順）
 1. 公開リポジトリを作成（ダミーのみ）。`main` を既定、`ai/base` と `ai/integration` を同じ位置に作る。
 2. Ruleset `ai-integration`（`docs/rulesets/ai-integration.json`）: 削除禁止・force push 禁止・PR 必須（承認 0・会話の解決必須）・バイパスなし。
