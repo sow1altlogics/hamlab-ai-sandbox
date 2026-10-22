@@ -70,6 +70,39 @@ bot のアカウント名: `chatgpt-codex-connector[bot]`
 - 指摘なし（小さな変更）: 約1〜1.5分。指摘あり（#6）: 約55秒。大きめの変更で P1 が4件（#3）: 約3分51秒。
 - 自動で起動するのは「PR を開いたとき」「ドラフトをレビュー可にしたとき」。新しいコミットを push したときの再レビューは未確認。
 
+
+## 第2段階: ドナが修正 → Codex が再レビュー（2026-10-22）
+PR #3 の P1 4件を修正し、再レビューまでの流れを検証した。コミットはすべて人間(sow1altlogics)の認証で作成。bot のコミット・push は無し。
+
+### 指摘と修正（元の4件）
+| # | 指摘 | 原因 | 修正 | 確認するテスト |
+|---|---|---|---|---|
+| 1 | ai/base が更新されても base-freshness が再評価されず、古い合格が残る | `pull_request` のイベントが無いと GitHub は再実行しない | ① `sync.sh` が ai/base 更新後に開いている PR の本チェックを再実行(`recheck_prs.sh`) ② マージ直前に `pre_merge_check.sh` でその時点の状態を再評価 | `test_check_base_freshness.sh` |
+| 2 | ブランチ名 `ai/sync-*` だけで cherry-pick-check を免除しており、なりすませる | 判定が名前だけ | 中身で判定(2親の merge で、内容が「integration と base を merge しただけ」と一致)。人間が付ける `sync-approved` ラベルのみ例外。フォークは免除しない | `test_is_sync_pr.sh`（なりすまし・余計な変更を含む merge・フォーク・ラベル・コンフリクト） |
+| 3 | `git log` の失敗が `\|\| true` に飲み込まれ、失敗しても「OK」になる | パイプライン全体に `\|\| true` | `git log` の失敗はそこで止める。grep の「該当なし」(rc=1)だけを許容 | `test_check_bot_commits.sh`（存在しない範囲→異常終了） |
+| 4 | 許可ラベルが部分一致で、別のラベルでも通る | `grep -q` の部分一致 | `jq` で完全一致のみ。壊れた JSON も許可にしない | `test_check_bot_commits.sh`（do-not-allow-bot-push 等） |
+
+### Codex の再レビュー（観察）
+| # | 内容 | 結果 |
+|---|---|---|
+| 1 | 修正コミットを push（2回） | **自動の再レビューは起動しなかった**（2m45s / 65s 待っても反応なし）。起動条件は「PR を開く」「ドラフトをレビュー可に」「手動コメント」のみ |
+| 2 | `@codex review` で再依頼 | **動作する**。1回目の再依頼は約3分50秒、2回目は約3分44秒で完了。状態は `running` → `completed`。サマリーコメントの `commit_sha` が現在の先端に更新される |
+| 3 | 元の4件が再指摘されたか | **されなかった**。ただし旧スレッドは GitHub 上で**解決済みにならない**（3件は outdated になるが resolved=false）。Codex は自動で解決しない |
+| 4 | 再レビューで出た新しい指摘 | 2回目: 追加した `pre_merge_check.sh` の2件(P1相当・妥当)→修正+テスト。3回目: 設計上の限界2件(下記) |
+| 5 | CI の5チェック | 修正後の先端でもすべて成功。ただし `labeled` イベントで一部が再実行され、その間 `pre_merge_check` が in_progress を検出して NG にした（意図した安全側の動作） |
+
+### 往復の数と停止
+1回目(4件・コードの欠陥)→2回目(2件・新コードの欠陥)→3回目(2件・設計上の限界)。**3往復に達したので自動では進めず、`needs-human` ラベルを付けて人間の判断待ちにした。**
+3回目の指摘（要判断）:
+- CI の判定スクリプトを PR 自身のチェックアウトから実行している → PR が自分の検査を書き換えられる（`pull_request` の CI に共通の限界。`.github/` と `ops/ci/` の変更は人間のレビュー必須にする運用で補うのが現実的）
+- gitleaks のベースライン/設定を PR 自身から読む → PR が自分の混入を「既知」にできる（信頼できる基点のコピーを使う、または変更を拒否する）
+
+### 「完了」の判定（時間経過では判断しない）
+- Codex のサマリーコメントに、機械可読の状態 `<!-- codex-review-state:v1 {"code_review":{"commit_sha":..., "status":"running|completed", "has_unresolved_findings":...}} -->` が埋め込まれている。
+- `ops/ai/codex_state.sh` は、**status=completed かつ commit_sha が現在の先端と一致し、未解決の指摘が無い**ときだけ通過とする。👀 は開始の合図で、完了ではない。新しい push 後は STALE_COMMIT として NG。
+- docs だけのコミットを push しても、レビューは古くなる（再依頼が必要）。
+- `has_unresolved_findings` は、旧スレッドを人間が解決するまで true のまま（未確認: Codex がスレッドの解決をどう反映するか）。
+
 ## 設定（再現手順）
 1. 公開リポジトリを作成（ダミーのみ）。`main` を既定、`ai/base` と `ai/integration` を同じ位置に作る。
 2. Ruleset `ai-integration`（`docs/rulesets/ai-integration.json`）: 削除禁止・force push 禁止・PR 必須（承認 0・会話の解決必須）・バイパスなし。
