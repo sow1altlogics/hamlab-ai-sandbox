@@ -1,0 +1,30 @@
+name: no-unexpected-bot-push
+# 第1段階は一方向（レビューのみ）。bot が PR ブランチへコミットしたら止める。
+# 意図して許す場合だけ、PR に allow-bot-push ラベルを付ける。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [ai/integration]
+permissions:
+  contents: read
+jobs:
+  no-unexpected-bot-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: PR のコミットの作者を確認
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          bad=$(git log --format='%H %an <%ae> | %cn <%ce>' "${BASE_SHA}..${HEAD_SHA}" | grep -iE '\[bot\]|codex|chatgpt' || true)
+          if [ -n "$bad" ]; then
+            if echo "$LABELS" | grep -q 'allow-bot-push'; then echo "bot のコミットあり(許可ラベルあり)"; exit 0; fi
+            echo "::error::bot によるコミットが含まれています（第1段階では想定外）:"; echo "$bad" | cut -c1-120
+            exit 1
+          fi
+          echo "OK: bot のコミットなし"

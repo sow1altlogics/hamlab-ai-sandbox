@@ -1,0 +1,28 @@
+name: base-freshness
+# ai/integration が ai/base（本番基準）より古いまま、レビュー済みの変更が積み上がるのを防ぐ。
+on:
+  pull_request:
+    branches: [ai/integration]
+permissions:
+  contents: read
+jobs:
+  base-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: ai/base を取り込み済みか
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin ai/base ai/integration
+          if git merge-base --is-ancestor origin/ai/base origin/ai/integration; then
+            echo "OK: ai/integration は ai/base を取り込み済み"; exit 0
+          fi
+          if git merge-base --is-ancestor origin/ai/base "$HEAD_SHA"; then
+            echo "OK: この PR が ai/base を取り込む（sync PR）"; exit 0
+          fi
+          echo "::error::ai/integration が ai/base（本番基準）より古い。先に ai/base を取り込む sync PR を出してください。"
+          exit 1

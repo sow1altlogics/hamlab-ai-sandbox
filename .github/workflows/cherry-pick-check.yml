@@ -1,0 +1,32 @@
+name: cherry-pick-check
+# この PR の変更を、いまの本番基準(ai/base)にそのまま当てられるかを、配布の前に知らせる。
+# 当たらない場合は、未配布の変更に依存している可能性がある（依存を PR に書くこと）。
+on:
+  pull_request:
+    branches: [ai/integration]
+permissions:
+  contents: read
+jobs:
+  cherry-pick-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 本番基準に当てられるか
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          case "$HEAD_REF" in ai/sync-*) echo "sync PR は対象外"; exit 0;; esac
+          git fetch -q origin ai/base ai/integration
+          git diff "origin/ai/integration...${HEAD_SHA}" -- . ':!.github' ':!AGENTS.md' ':!docs' > pr.patch
+          if [ ! -s pr.patch ]; then echo "対象の差分なし"; exit 0; fi
+          git checkout -q --detach origin/ai/base
+          if git apply --check pr.patch; then
+            echo "OK: 本番基準にそのまま当てられる"
+          else
+            echo "::error::この PR の変更は、いまの本番基準(ai/base)に当てられない。未配布の変更に依存していないか確認してください。"
+            exit 1
+          fi
